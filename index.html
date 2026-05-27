@@ -161,12 +161,17 @@
 
         /* LOG PAGE */
         .log-header {
-            padding: 52px 20px 16px;
-            display: flex; justify-content: space-between; align-items: flex-start;
+            padding: 52px 20px 8px;
+            display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
         }
-        .back-link {
+        .hdr-mid { flex: 1; min-width: 0; }
+        .hdr-cancel {
+            background: none; border: none; color: var(--text2);
+            font-size: 15px; cursor: pointer; padding: 6px 0; flex-shrink: 0;
+        }
+        .hdr-save {
             background: none; border: none; color: var(--accent);
-            font-size: 15px; font-weight: 600; cursor: pointer; padding: 4px 0;
+            font-size: 15px; font-weight: 800; cursor: pointer; padding: 6px 0; flex-shrink: 0;
         }
 
         .date-row {
@@ -266,16 +271,12 @@
         }
         .add-ex-btn:active { background: var(--surface); }
 
-        .finish-btn {
-            display: block; width: calc(100% - 32px); margin: 4px 16px 8px;
-            padding: 18px; background: var(--accent); color: #0d0d0d;
-            border: none; border-radius: 16px; font-size: 17px; font-weight: 800; cursor: pointer;
-        }
-        .discard-btn {
-            display: block; width: calc(100% - 32px); margin: 0 16px 16px;
-            padding: 13px; background: none;
-            border: 1px solid var(--border); border-radius: 12px;
-            color: var(--red); font-size: 14px; cursor: pointer;
+        /* MODAL EDIT BUTTON */
+        .modal-edit-btn {
+            display: block; width: calc(100% - 40px); margin: 0 20px 8px;
+            padding: 12px; background: var(--accent-dim);
+            border: 1px solid rgba(200,240,90,0.25); border-radius: 12px;
+            color: var(--accent); font-size: 14px; font-weight: 700; cursor: pointer;
         }
 
         /* SHEETS */
@@ -463,11 +464,12 @@
     <!-- Step B: log exercises -->
     <div id="log-step-b" style="display:none">
         <div class="log-header">
-            <div>
+            <button class="hdr-cancel" id="hdr-cancel-btn" onclick="cancelLog()">← Back</button>
+            <div class="hdr-mid">
                 <div class="page-title" id="log-title">Chest Day</div>
                 <div class="page-subtitle" id="log-subtitle"></div>
             </div>
-            <button class="back-link" onclick="backToStepA()">Change</button>
+            <button class="hdr-save" id="hdr-save-btn" onclick="finishWorkout()">Save</button>
         </div>
 
         <div id="group-pills"></div>
@@ -477,9 +479,6 @@
         <button class="add-ex-btn" onclick="openPicker()">
             <span style="font-size:20px;line-height:1">+</span> Add Exercise
         </button>
-
-        <button class="finish-btn" onclick="finishWorkout()">Save Workout</button>
-        <button class="discard-btn" onclick="discardWorkout()">Discard</button>
     </div>
 </div>
 
@@ -554,6 +553,7 @@
         </div>
         <div id="detail-exercises"></div>
         <div style="height:10px"></div>
+        <button class="modal-edit-btn" id="detail-edit-btn">Edit Workout</button>
         <button class="modal-del" id="detail-del-btn">Delete Workout</button>
     </div>
 </div>
@@ -653,6 +653,7 @@ function deleteById(id) { save(load().filter(w => w.id !== id)); }
 
 let currentPage = 'home';
 let active = null;         // in-progress workout
+let editingId = null;      // id of workout being edited (null = new)
 let histDate = new Date(); // month shown in history
 let detailId = null;       // workout open in detail modal
 
@@ -826,6 +827,8 @@ function showStepB() {
     document.getElementById('log-step-b').style.display = 'block';
     updateLogTitle();
     document.getElementById('log-subtitle').textContent = longDate(active.date);
+    document.getElementById('hdr-cancel-btn').textContent = editingId ? 'Cancel' : '← Back';
+    document.getElementById('hdr-save-btn').textContent = editingId ? 'Update' : 'Save';
     renderGroupPills();
     renderCards();
 }
@@ -870,9 +873,14 @@ function addGroup(g) {
     renderGroupPills();
 }
 
-function backToStepA() {
-    document.getElementById('log-step-a').style.display = 'block';
-    document.getElementById('log-step-b').style.display = 'none';
+function cancelLog() {
+    if (editingId) {
+        editingId = null;
+        active = null;
+        switchPage('home');
+    } else {
+        showStepA();
+    }
 }
 
 function renderCards() {
@@ -959,17 +967,17 @@ function finishWorkout() {
     });
     if (!active.muscleGroups) active.muscleGroups = [active.muscleGroup];
     active.muscleGroup = active.muscleGroups[0];
-    addWorkoutToStore(active);
-    active = null;
-    snack('Workout saved!');
-    switchPage('home');
-}
 
-function discardWorkout() {
-    if (confirm('Discard this workout?')) {
-        active = null;
-        showStepA();
+    if (editingId) {
+        save(load().map(w => w.id === editingId ? active : w));
+        editingId = null;
+        snack('Workout updated!');
+    } else {
+        addWorkoutToStore(active);
+        snack('Workout saved!');
     }
+    active = null;
+    switchPage('home');
 }
 
 // ─── Picker Sheet ─────────────────────────────────────────────────────────────
@@ -1045,6 +1053,18 @@ function closeDetail(e) {
     document.getElementById('detail-overlay').classList.remove('open');
     detailId = null;
 }
+
+document.getElementById('detail-edit-btn').addEventListener('click', () => {
+    if (!detailId) return;
+    const w = load().find(x => x.id === detailId);
+    if (!w) return;
+    editingId = detailId;
+    active = JSON.parse(JSON.stringify(w));
+    if (!active.muscleGroups) active.muscleGroups = [active.muscleGroup];
+    closeDetail(null);
+    switchPage('log');
+    showStepB();
+});
 
 document.getElementById('detail-del-btn').addEventListener('click', () => {
     if (!detailId) return;
